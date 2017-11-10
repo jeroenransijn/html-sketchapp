@@ -17,6 +17,9 @@ function removeExistingLayers(context) {
 }
 
 function fixLayer(layer) {
+  if (layer.isSVG) {
+    return;
+  }
   if (layer['_class'] === 'text') {
     fixTextLayer(layer);
   } else {
@@ -29,7 +32,10 @@ function fixLayer(layer) {
 }
 
 function removeSharedTextStyles(document) {
-  document.documentData().layerTextStyles().setObjects([]);
+  document
+    .documentData()
+    .layerTextStyles()
+    .setObjects([]);
 }
 
 function addSharedTextStyle(document, style) {
@@ -51,6 +57,20 @@ function addSharedColor(document, colorJSON) {
   assets.addColor(color);
 }
 
+function getLayerFromSVGString(rawSVGString) {
+  const svgString = NSString.stringWithString(rawSVGString);
+  // eslint-disable-next-line no-undef
+  const svgData = svgString.dataUsingEncoding(NSUTF8StringEncoding);
+  // eslint-disable-next-line no-undef
+  const svgImporter = MSSVGImporter.svgImporter();
+
+  svgImporter.prepareToImportFromData(svgData);
+  const svgLayer = svgImporter.importAsLayer();
+
+  return svgLayer;
+}
+
+// eslint-disable-next-line
 export default function(context) {
   const document = context.document;
   const page = document.currentPage();
@@ -121,8 +141,41 @@ export default function(context) {
     page.name = asketchPage.name;
 
     asketchPage.layers.forEach(layer => {
-      fixLayer(layer);
-      page.addLayer(fromSJSONDictionary(layer));
+      // Deal with the raw SVG string
+      // https://github.com/brainly/html-sketchapp/issues/4
+      let svgData;
+
+      if (layer.layers && layer.layers[0] && layer.layers[0].isSVG) {
+        svgData = layer.layers[0];
+        layer.layers = [];
+      }
+
+      if (svgData) {
+        try {
+          const svgLayer = getLayerFromSVGString(svgData.rawSVGString);
+
+          svgLayer.frame().setX(svgData.x || layer.frame.x);
+          svgLayer.frame().setY(svgData.y || layer.frame.y);
+          svgLayer.frame().setHeight(svgData.height || layer.frame.height);
+          svgLayer.frame().setWidth(svgData.width || layer.frame.width);
+          page.addLayer(svgLayer);
+        } catch (e) {
+          const alert = NSAlert.alloc().init();
+
+          alert.setMessageText('SVG is invalid.');
+          alert.runModal();
+        }
+      } else {
+        try {
+          fixLayer(layer);
+          page.addLayer(fromSJSONDictionary(layer));
+        } catch (e) {
+          // const alert = NSAlert.alloc().init();
+          //
+          // alert.setMessageText('JSON is invalid.');
+          // alert.runModal();
+        }
+      }
     });
 
     console.log('Layers added: ' + asketchPage.layers.length);

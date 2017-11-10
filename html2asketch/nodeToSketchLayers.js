@@ -4,6 +4,7 @@ import createXPathFromElement from './helpers/createXPathFromElement.js';
 import Style from './style.js';
 import Text from './text.js';
 import TextStyle from './textStyle.js';
+import SVG from './svg.js';
 
 const DEFAULT_VALUES = {
   backgroundColor: 'rgba(0, 0, 0, 0)',
@@ -206,6 +207,23 @@ export default async function nodeToSketchLayers(node) {
 
   const leaf = new ShapeGroup({x, y, width, height});
   const isImage = node.nodeName === 'IMG' && node.attributes.src;
+  const isSVG = node.nodeName.toLowerCase() === 'svg';
+
+  if (isSVG) {
+    // Pass on the raw SVG string and have Sketch deal with it
+    // https://github.com/brainly/html-sketchapp/issues/4
+    const pathData = {};
+
+    const {width, height, x, y} = node.childNodes[0].getBoundingClientRect();
+
+    pathData.width = width;
+    pathData.height = height;
+    pathData.x = x;
+    pathData.y = y;
+
+    leaf.addLayer(new SVG(Object.assign({rawSVGString: node.outerHTML}, pathData)));
+    layers.push(leaf);
+  }
 
   // if layer has no background/shadow/border/etc. skip it
   if (isImage || !hasOnlyDefaultStyles(styles)) {

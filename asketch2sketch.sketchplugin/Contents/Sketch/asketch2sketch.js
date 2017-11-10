@@ -350,8 +350,41 @@ exports['default'] = function (context) {
     page.name = asketchPage.name;
 
     asketchPage.layers.forEach(function (layer) {
-      fixLayer(layer);
-      page.addLayer((0, _sketchappJsonPlugin.fromSJSONDictionary)(layer));
+      // Deal with the raw SVG string
+      // https://github.com/brainly/html-sketchapp/issues/4
+      var svgData = void 0;
+
+      if (layer.layers && layer.layers[0] && layer.layers[0].isSVG) {
+        svgData = layer.layers[0];
+        layer.layers = [];
+      }
+
+      if (svgData) {
+        try {
+          var svgLayer = getLayerFromSVGString(svgData.rawSVGString);
+
+          svgLayer.frame().setX(svgData.x || layer.frame.x);
+          svgLayer.frame().setY(svgData.y || layer.frame.y);
+          svgLayer.frame().setHeight(svgData.height || layer.frame.height);
+          svgLayer.frame().setWidth(svgData.width || layer.frame.width);
+          page.addLayer(svgLayer);
+        } catch (e) {
+          var alert = NSAlert.alloc().init();
+
+          alert.setMessageText('SVG is invalid.');
+          alert.runModal();
+        }
+      } else {
+        try {
+          fixLayer(layer);
+          page.addLayer((0, _sketchappJsonPlugin.fromSJSONDictionary)(layer));
+        } catch (e) {
+          // const alert = NSAlert.alloc().init();
+          //
+          // alert.setMessageText('JSON is invalid.');
+          // alert.runModal();
+        }
+      }
     });
 
     console.log('Layers added: ' + asketchPage.layers.length);
@@ -383,6 +416,9 @@ function removeExistingLayers(context) {
 }
 
 function fixLayer(layer) {
+  if (layer.isSVG) {
+    return;
+  }
   if (layer['_class'] === 'text') {
     (0, _fixFont.fixTextLayer)(layer);
   } else {
@@ -416,6 +452,21 @@ function addSharedColor(document, colorJSON) {
 
   assets.addColor(color);
 }
+
+function getLayerFromSVGString(rawSVGString) {
+  var svgString = NSString.stringWithString(rawSVGString);
+  // eslint-disable-next-line no-undef
+  var svgData = svgString.dataUsingEncoding(NSUTF8StringEncoding);
+  // eslint-disable-next-line no-undef
+  var svgImporter = MSSVGImporter.svgImporter();
+
+  svgImporter.prepareToImportFromData(svgData);
+  var svgLayer = svgImporter.importAsLayer();
+
+  return svgLayer;
+}
+
+// eslint-disable-next-line
 /* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(0)))
 
 /***/ }),
